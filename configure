@@ -782,8 +782,12 @@ XMKMF
 SDL2_CONFIG
 SDL_LIBS
 SDL_CFLAGS
-PKG_CONFIG
 SDL_VERSION
+HAVE_RAQM_FALSE
+HAVE_RAQM_TRUE
+RAQM_LIBS
+RAQM_CFLAGS
+PKG_CONFIG
 FREETYPE_CONFIG
 USE_VERSION_RC_FALSE
 USE_VERSION_RC_TRUE
@@ -923,6 +927,7 @@ enable_dependency_tracking
 enable_silent_rules
 with_freetype_prefix
 with_freetype_exec_prefix
+with_raqm
 with_sdl_prefix
 with_sdl_exec_prefix
 enable_sdltest
@@ -938,6 +943,8 @@ LIBS
 CPPFLAGS
 CPP
 PKG_CONFIG
+RAQM_CFLAGS
+RAQM_LIBS
 SDL_CFLAGS
 SDL_LIBS
 XMKMF'
@@ -1584,6 +1591,7 @@ Optional Packages:
 installed (optional)
   --with-freetype-exec-prefix=PFX Exec prefix
 where FREETYPE is installed (optional)
+  --with-raqm             with complex text layout support
   --with-sdl-prefix=PFX   Prefix where SDL is installed (optional)
   --with-sdl-exec-prefix=PFX Exec prefix where SDL is installed (optional)
   --with-x                use the X Window System
@@ -1598,6 +1606,8 @@ Some influential environment variables:
               you have headers in a nonstandard directory <include dir>
   CPP         C preprocessor
   PKG_CONFIG  path to pkg-config utility
+  RAQM_CFLAGS C compiler flags for RAQM, overriding pkg-config
+  RAQM_LIBS   linker flags for RAQM, overriding pkg-config
   SDL_CFLAGS  C compiler flags for SDL, overriding pkg-config
   SDL_LIBS    linker flags for SDL, overriding pkg-config
   XMKMF       Path to xmkmf, Makefile generator for X Window System
@@ -3933,13 +3943,13 @@ if ${lt_cv_nm_interface+:} false; then :
 else
   lt_cv_nm_interface="BSD nm"
   echo "int some_variable = 0;" > conftest.$ac_ext
-  (eval echo "\"\$as_me:3936: $ac_compile\"" >&5)
+  (eval echo "\"\$as_me:3946: $ac_compile\"" >&5)
   (eval "$ac_compile" 2>conftest.err)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:3939: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
+  (eval echo "\"\$as_me:3949: $NM \\\"conftest.$ac_objext\\\"\"" >&5)
   (eval "$NM \"conftest.$ac_objext\"" 2>conftest.err > conftest.out)
   cat conftest.err >&5
-  (eval echo "\"\$as_me:3942: output\"" >&5)
+  (eval echo "\"\$as_me:3952: output\"" >&5)
   cat conftest.out >&5
   if $GREP 'External.*some_variable' conftest.out > /dev/null; then
     lt_cv_nm_interface="MS dumpbin"
@@ -5150,7 +5160,7 @@ ia64-*-hpux*)
   ;;
 *-*-irix6*)
   # Find out which ABI we are using.
-  echo '#line 5153 "configure"' > conftest.$ac_ext
+  echo '#line 5163 "configure"' > conftest.$ac_ext
   if { { eval echo "\"\$as_me\":${as_lineno-$LINENO}: \"$ac_compile\""; } >&5
   (eval $ac_compile) 2>&5
   ac_status=$?
@@ -6977,11 +6987,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:6980: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:6990: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:6984: \$? = $ac_status" >&5
+   echo "$as_me:6994: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7316,11 +7326,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7319: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7329: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>conftest.err)
    ac_status=$?
    cat conftest.err >&5
-   echo "$as_me:7323: \$? = $ac_status" >&5
+   echo "$as_me:7333: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s "$ac_outfile"; then
      # The compiler can only warn and ignore the option if not recognized
      # So say no if there are warnings other than the usual output.
@@ -7421,11 +7431,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7424: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7434: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:7428: \$? = $ac_status" >&5
+   echo "$as_me:7438: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -7476,11 +7486,11 @@ else
    -e 's:.*FLAGS}\{0,1\} :&$lt_compiler_flag :; t' \
    -e 's: [^ ]*conftest\.: $lt_compiler_flag&:; t' \
    -e 's:$: $lt_compiler_flag:'`
-   (eval echo "\"\$as_me:7479: $lt_compile\"" >&5)
+   (eval echo "\"\$as_me:7489: $lt_compile\"" >&5)
    (eval "$lt_compile" 2>out/conftest.err)
    ac_status=$?
    cat out/conftest.err >&5
-   echo "$as_me:7483: \$? = $ac_status" >&5
+   echo "$as_me:7493: \$? = $ac_status" >&5
    if (exit $ac_status) && test -s out/conftest2.$ac_objext
    then
      # The compiler can only warn and ignore the option if not recognized
@@ -9845,7 +9855,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 9848 "configure"
+#line 9858 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -9941,7 +9951,7 @@ else
   lt_dlunknown=0; lt_dlno_uscore=1; lt_dlneed_uscore=2
   lt_status=$lt_dlunknown
   cat > conftest.$ac_ext <<_LT_EOF
-#line 9944 "configure"
+#line 9954 "configure"
 #include "confdefs.h"
 
 #if HAVE_DLFCN_H
@@ -11942,8 +11952,17 @@ else
     LIBS="$LIBS `$FREETYPE_CONFIG $freetypeconf_args --libs`"
 fi
 
-SDL_VERSION=2.0.0
 
+# Check whether --with-raqm was given.
+if test "${with_raqm+set}" = set; then :
+  withval=$with_raqm; with_raqm=$withval
+else
+  with_with='yes'
+fi
+
+
+have_raqm=""
+if test "x$with_raqm" != 'xno'; then
 
 
 if test "x$ac_cv_env_PKG_CONFIG_set" != "xset"; then
@@ -12060,6 +12079,116 @@ $as_echo "no" >&6; }
 	fi
 
 fi
+
+pkg_failed=no
+{ $as_echo "$as_me:${as_lineno-$LINENO}: checking for RAQM" >&5
+$as_echo_n "checking for RAQM... " >&6; }
+
+if test -n "$PKG_CONFIG"; then
+    if test -n "$RAQM_CFLAGS"; then
+        pkg_cv_RAQM_CFLAGS="$RAQM_CFLAGS"
+    else
+        if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"raqm\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "raqm") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_RAQM_CFLAGS=`$PKG_CONFIG --cflags "raqm" 2>/dev/null`
+else
+  pkg_failed=yes
+fi
+    fi
+else
+	pkg_failed=untried
+fi
+if test -n "$PKG_CONFIG"; then
+    if test -n "$RAQM_LIBS"; then
+        pkg_cv_RAQM_LIBS="$RAQM_LIBS"
+    else
+        if test -n "$PKG_CONFIG" && \
+    { { $as_echo "$as_me:${as_lineno-$LINENO}: \$PKG_CONFIG --exists --print-errors \"raqm\""; } >&5
+  ($PKG_CONFIG --exists --print-errors "raqm") 2>&5
+  ac_status=$?
+  $as_echo "$as_me:${as_lineno-$LINENO}: \$? = $ac_status" >&5
+  test $ac_status = 0; }; then
+  pkg_cv_RAQM_LIBS=`$PKG_CONFIG --libs "raqm" 2>/dev/null`
+else
+  pkg_failed=yes
+fi
+    fi
+else
+	pkg_failed=untried
+fi
+
+
+
+if test $pkg_failed = yes; then
+
+if $PKG_CONFIG --atleast-pkgconfig-version 0.20; then
+        _pkg_short_errors_supported=yes
+else
+        _pkg_short_errors_supported=no
+fi
+        if test $_pkg_short_errors_supported = yes; then
+	        RAQM_PKG_ERRORS=`$PKG_CONFIG --short-errors --errors-to-stdout --print-errors "raqm"`
+        else
+	        RAQM_PKG_ERRORS=`$PKG_CONFIG --errors-to-stdout --print-errors "raqm"`
+        fi
+	# Put the nasty error message in config.log where it belongs
+	echo "$RAQM_PKG_ERRORS" >&5
+
+	as_fn_error $? "Package requirements (raqm) were not met:
+
+$RAQM_PKG_ERRORS
+
+Consider adjusting the PKG_CONFIG_PATH environment variable if you
+installed software in a non-standard prefix.
+
+Alternatively, you may set the environment variables RAQM_CFLAGS
+and RAQM_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+" "$LINENO" 5
+elif test $pkg_failed = untried; then
+	{ { $as_echo "$as_me:${as_lineno-$LINENO}: error: in \`$ac_pwd':" >&5
+$as_echo "$as_me: error: in \`$ac_pwd':" >&2;}
+as_fn_error $? "The pkg-config script could not be found or is too old.  Make sure it
+is in your PATH or set the PKG_CONFIG environment variable to the full
+path to pkg-config.
+
+Alternatively, you may set the environment variables RAQM_CFLAGS
+and RAQM_LIBS to avoid the need to call pkg-config.
+See the pkg-config man page for more details.
+
+To get pkg-config, see <http://pkg-config.freedesktop.org/>.
+See \`config.log' for more details" "$LINENO" 5; }
+else
+	RAQM_CFLAGS=$pkg_cv_RAQM_CFLAGS
+	RAQM_LIBS=$pkg_cv_RAQM_LIBS
+        { $as_echo "$as_me:${as_lineno-$LINENO}: result: yes" >&5
+$as_echo "yes" >&6; }
+	have_raqm="yes"
+fi
+fi
+
+if test "x$have_raqm" == "xyes"; then
+    $as_echo "#define HAVE_RAQM 1" >>confdefs.h
+
+    CFLAGS="$CFLAGS $RAQM_CFLAGS"
+    LIBS="$LIBS $RAQM_LIBS"
+
+fi
+ if test "x$have_raqm" == "xyes"; then
+  HAVE_RAQM_TRUE=
+  HAVE_RAQM_FALSE='#'
+else
+  HAVE_RAQM_TRUE='#'
+  HAVE_RAQM_FALSE=
+fi
+
+
+SDL_VERSION=2.0.0
+
 
 # Check whether --with-sdl-prefix was given.
 if test "${with_sdl_prefix+set}" = set; then :
@@ -13326,6 +13455,10 @@ fi
 
 if test -z "${USE_VERSION_RC_TRUE}" && test -z "${USE_VERSION_RC_FALSE}"; then
   as_fn_error $? "conditional \"USE_VERSION_RC\" was never defined.
+Usually this means the macro was only invoked conditionally." "$LINENO" 5
+fi
+if test -z "${HAVE_RAQM_TRUE}" && test -z "${HAVE_RAQM_FALSE}"; then
+  as_fn_error $? "conditional \"HAVE_RAQM\" was never defined.
 Usually this means the macro was only invoked conditionally." "$LINENO" 5
 fi
 
