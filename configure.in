@@ -120,6 +120,26 @@ else
     LIBS="$LIBS `$FREETYPE_CONFIG $freetypeconf_args --libs`"
 fi
 
+dnl Check for the Raqm
+AC_ARG_WITH(raqm,
+    [AS_HELP_STRING([--with-raqm],
+                    [with complex text layout support])],
+    [with_raqm=$withval],
+    [with_with='yes'])
+
+have_raqm=""
+if test "x$with_raqm" != 'xno'; then
+    PKG_CHECK_MODULES(RAQM, raqm, have_raqm="yes", [])
+fi
+
+if test "x$have_raqm" == "xyes"; then
+    AC_DEFINE(HAVE_RAQM)
+    CFLAGS="$CFLAGS $RAQM_CFLAGS"
+    LIBS="$LIBS $RAQM_LIBS"
+
+fi
+AM_CONDITIONAL(HAVE_RAQM, test "x$have_raqm" == "xyes")
+
 dnl Check for SDL
 SDL_VERSION=2.0.0
 AC_SUBST(SDL_VERSION)
