@@ -35,6 +35,10 @@
 #include "SDL_endian.h"
 #include "SDL_ttf.h"
 
+#ifdef HAVE_RAQM
+#include "raqm.h"
+#endif
+
 /* FIXME: Right now we assume the gray-scale renderer Freetype is using
    supports 256 shades of gray, but we should instead key off of num_grays
    in the result FT_Bitmap after the FT_Render_Glyph() call. */
@@ -330,6 +334,121 @@ static void TTF_SetFTError(const char *msg, FT_Error error)
     TTF_SetError("%s", msg);
 #endif /* USE_FREETYPE_ERRORS */
 }
+
+static FT_Error Find_Glyph( TTF_Font* font, Uint16 ch, int want );
+static Uint32 UTF8_getch(const char **src, size_t *srclen);
+
+#ifndef HAVE_RAQM
+typedef struct {
+    int index;
+    int x_offset;
+    int x_advance;
+    int y_offset;
+} raqm_glyph_t;
+#endif
+
+raqm_glyph_t *text_layout(const char *text, size_t textlen, TTF_Font *font, size_t *glyph_count)
+{
+
+#ifdef HAVE_RAQM
+    raqm_t *rq;
+    raqm_glyph_t *glyphs;
+
+    rq = raqm_create();
+    if ( rq == NULL )
+    {
+        raqm_destroy(rq);
+        *glyph_count = 0;
+        return NULL;
+    }
+
+    if ( !raqm_set_text_utf8(rq, text, textlen) )
+    {
+        raqm_destroy(rq);
+        *glyph_count = 0;
+        return NULL;
+    }
+
+
+    if ( !raqm_set_freetype_face(rq, font->face) )
+    {
+        raqm_destroy(rq);
+        *glyph_count = 0;
+        return NULL;
+    }
+
+    if ( !raqm_set_par_direction(rq, RAQM_DIRECTION_DEFAULT) )
+    {
+        raqm_destroy(rq);
+        *glyph_count = 0;
+        return NULL;
+    }
+
+    if ( !raqm_layout(rq) )
+    {
+        raqm_destroy(rq);
+        *glyph_count = 0;
+        return NULL;
+    }
+
+    glyphs = raqm_get_glyphs(rq, glyph_count);
+    if ( glyphs == NULL )
+    {
+        raqm_destroy(rq);
+        *glyph_count = 0;
+        return NULL;
+    }
+
+    return glyphs;
+#else
+    int xstart;
+    c_glyph *glyph;
+    FT_Error error;
+    FT_Long use_kerning;
+    FT_UInt prev_index = 0;
+    raqm_glyph_t *g_info;
+    size_t count = 0;
+
+    /* check kerning */
+    use_kerning = FT_HAS_KERNING( font->face ) && font->kerning;
+
+    g_info = (raqm_glyph_t*) malloc(sizeof(raqm_glyph_t) * (textlen));
+
+    xstart = 0;
+    for ( count = 0; textlen > 0; count++ ) {
+        Uint16 c = UTF8_getch(&text, &textlen);
+        if ( c == UNICODE_BOM_NATIVE || c == UNICODE_BOM_SWAPPED ) {
+            continue;
+        }
+
+        error = Find_Glyph(font, c, CACHED_METRICS|CACHED_BITMAP);
+        if ( error ) {
+            TTF_SetFTError("Couldn't find glyph", error);
+            *glyph_count = 0;
+            return NULL;
+        }
+        glyph = font->current;
+
+        g_info[count].index = glyph->index;
+        g_info[count].y_offset = 0;
+        g_info[count].x_offset = 0;
+        g_info[count].x_advance = glyph->advance;
+
+        /* do kerning, if possible AC-Patch */
+        if ( use_kerning && prev_index && glyph->index ) {
+            FT_Vector delta;
+            FT_Get_Kerning( font->face, prev_index, g_info->index, ft_kerning_default, &delta );
+            xstart += delta.x >> 6;
+            g_info[count - 1].x_advance += delta.x;
+        }
+    }
+
+    *glyph_count = count;
+
+    return g_info;
+#endif
+}
+
 
 int TTF_Init(void)
 {
@@ -635,7 +754,7 @@ static FT_Error Load_Glyph(TTF_Font* font, Uint32 ch, c_glyph* cached, int want)
             cached->maxy = FT_FLOOR(metrics->horiBearingY);
             cached->miny = cached->maxy - FT_CEIL(metrics->height);
             cached->yoffset = font->ascent - cached->maxy;
-            cached->advance = FT_CEIL(metrics->horiAdvance);
+            cached->advance = metrics->horiAdvance;
         } else {
             /* Get the bounding box for non-scalable format.
              * Again, freetype2 fills in many of the font metrics
@@ -648,7 +767,7 @@ static FT_Error Load_Glyph(TTF_Font* font, Uint32 ch, c_glyph* cached, int want)
             cached->maxy = FT_FLOOR(metrics->horiBearingY);
             cached->miny = cached->maxy - FT_CEIL(face->available_sizes[font->font_size_family].height);
             cached->yoffset = 0;
-            cached->advance = FT_CEIL(metrics->horiAdvance);
+            cached->advance = metrics->horiAdvance;
         }
 
         /* Adjust for bold and italic text */
@@ -929,6 +1048,24 @@ static FT_Error Find_Glyph(TTF_Font* font, Uint32 ch, int want)
     return retval;
 }
 
+static FT_Error Find_GlyphByIndex( TTF_Font* font, Uint16 idx, int want )
+{
+    int retval = 0;
+    int hsize = sizeof( font->cache ) / sizeof( font->cache[0] );
+
+    int h = idx % hsize;
+    font->current = &font->cache[h];
+
+    if (font->current->cached != idx)
+        Flush_Glyph( font->current );
+
+    if ( (font->current->stored & want) != want ) {
+        font->current->index = idx;
+        retval = Load_Glyph( font, idx, font->current, want );
+    }
+    return retval;
+}
+
 void TTF_CloseFont(TTF_Font* font)
 {
     if (font) {
@@ -1197,7 +1334,7 @@ int TTF_GlyphMetrics(TTF_Font *font, Uint16 ch,
         *maxy = font->current->maxy;
     }
     if (advance) {
-        *advance = font->current->advance;
+        *advance = FT_CEIL(font->current->advance);
         if (TTF_HANDLE_STYLE_BOLD(font)) {
             *advance += font->glyph_overhang;
         }
@@ -1223,7 +1360,7 @@ int TTF_SizeText(TTF_Font *font, const char *text, int *w, int *h)
     return status;
 }
 
-int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
+static int CalculateSize(TTF_Font *font, raqm_glyph_t *g_info, size_t glyph_count, int *w, int*h)
 {
     int status;
     int x, z;
@@ -1231,20 +1368,14 @@ int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
     int miny, maxy;
     c_glyph *glyph;
     FT_Error error;
-    FT_Long use_kerning;
     FT_UInt prev_index = 0;
     int outline_delta = 0;
-    size_t textlen;
-
-    TTF_CHECKPOINTER(text, -1);
+    int i;
 
     /* Initialize everything to 0 */
     status = 0;
     minx = maxx = 0;
     miny = maxy = 0;
-
-    /* check kerning */
-    use_kerning = FT_HAS_KERNING(font->face) && font->kerning;
 
     /* Init outline handling */
     if (font->outline > 0) {
@@ -1252,48 +1383,16 @@ int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
     }
 
     /* Load each character and sum it's bounding box */
-    textlen = SDL_strlen(text);
     x= 0;
-    while (textlen > 0) {
-        Uint32 c = UTF8_getch(&text, &textlen);
-        if (c == UNICODE_BOM_NATIVE || c == UNICODE_BOM_SWAPPED) {
-            continue;
-        }
-
-        error = Find_Glyph(font, c, CACHED_METRICS);
+    for (i = 0; i < glyph_count; i++) {
+        error = Find_GlyphByIndex(font, g_info[i].index, CACHED_METRICS);
         if (error) {
             TTF_SetFTError("Couldn't find glyph", error);
             return -1;
         }
         glyph = font->current;
 
-        /* handle kerning */
-        if (use_kerning && prev_index && glyph->index) {
-            FT_Vector delta;
-            FT_Get_Kerning(font->face, prev_index, glyph->index, ft_kerning_default, &delta);
-            x += delta.x >> 6;
-        }
-
-#if 0
-        if ((ch == text) && (glyph->minx < 0)) {
-        /* Fixes the texture wrapping bug when the first letter
-         * has a negative minx value or horibearing value.  The entire
-         * bounding box must be adjusted to be bigger so the entire
-         * letter can fit without any texture corruption or wrapping.
-         *
-         * Effects: First enlarges bounding box.
-         * Second, xstart has to start ahead of its normal spot in the
-         * negative direction of the negative minx value.
-         * (pushes everything to the right).
-         *
-         * This will make the memory copy of the glyph bitmap data
-         * work out correctly.
-         * */
-            z -= glyph->minx;
-        }
-#endif
-
-        z = x + glyph->minx;
+        z = x + FT_FLOOR(g_info[i].x_offset) + glyph->minx;
         if (minx > z) {
             minx = z;
         }
@@ -1301,14 +1400,14 @@ int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
             x += font->glyph_overhang;
         }
         if (glyph->advance > glyph->maxx) {
-            z = x + glyph->advance;
+            z = x + FT_FLOOR(g_info[i].x_advance);
         } else {
-            z = x + glyph->maxx;
+            z = x + FT_FLOOR(g_info[i].x_offset) + glyph->maxx;
         }
         if (maxx < z) {
             maxx = z;
         }
-        x += glyph->advance;
+        x += FT_FLOOR(g_info[i].x_advance);
 
         if (glyph->miny < miny) {
             miny = glyph->miny;
@@ -1316,7 +1415,7 @@ int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
         if (glyph->maxy > maxy) {
             maxy = glyph->maxy;
         }
-        prev_index = glyph->index;
+        prev_index = g_info[i].index;
     }
 
     /* Fill the bounds rectangle */
@@ -1340,6 +1439,24 @@ int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
         }
     }
     return status;
+}
+
+int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
+{
+    raqm_glyph_t *glyphs;
+    size_t glyph_count;
+    size_t textlen;
+
+    TTF_CHECKPOINTER(text, -1);
+
+    textlen = SDL_strlen(text);
+
+    /* Shape text */
+
+    glyphs = text_layout(text, textlen, font, &glyph_count);
+
+    /* Calculate the size */
+    return CalculateSize(font, glyphs, glyph_count, w, h);
 }
 
 int TTF_SizeUNICODE(TTF_Font *font, const Uint16 *text, int *w, int *h)
@@ -1391,18 +1508,24 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
     Uint8* dst;
     Uint8 *dst_check;
     int row, col;
+    int i;
     c_glyph *glyph;
-
+    raqm_glyph_t *g_info;
+    size_t glyph_count;
     FT_Bitmap *current;
     FT_Error error;
-    FT_Long use_kerning;
     FT_UInt prev_index = 0;
     size_t textlen;
-
     TTF_CHECKPOINTER(text, NULL);
 
+    textlen = SDL_strlen(text);
+
+    /* Shape text */
+
+    g_info = text_layout(text, textlen, font, &glyph_count);
+
     /* Get the dimensions of the text surface */
-    if ((TTF_SizeUTF8(font, text, &width, &height) < 0) || !width) {
+    if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
         TTF_SetError("Text has zero width");
         return NULL;
     }
@@ -1428,25 +1551,19 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
     palette->colors[1].a = fg.a ? fg.a : SDL_ALPHA_OPAQUE;
     SDL_SetColorKey(textbuf, SDL_TRUE, 0);
 
-    /* check kerning */
-    use_kerning = FT_HAS_KERNING(font->face) && font->kerning;
-
-    /* Load and render each character */
-    textlen = SDL_strlen(text);
+    /* Load and render each glyph */
+    first = SDL_TRUE;
     xstart = 0;
-    while (textlen > 0) {
-        Uint32 c = UTF8_getch(&text, &textlen);
-        if (c == UNICODE_BOM_NATIVE || c == UNICODE_BOM_SWAPPED) {
-            continue;
-        }
-
-        error = Find_Glyph(font, c, CACHED_METRICS|CACHED_BITMAP);
+    for (i = 0; i < glyph_count; i++) {
+        int y_offset;
+        error = Find_GlyphByIndex(font, g_info[i].index, CACHED_METRICS|CACHED_BITMAP);
         if (error) {
             TTF_SetFTError("Couldn't find glyph", error);
             SDL_FreeSurface(textbuf);
             return NULL;
         }
         glyph = font->current;
+        y_offset = glyph->yoffset - FT_FLOOR(g_info[i].y_offset);
         current = &glyph->bitmap;
         /* Ensure the width of the pixmap is correct. On some cases,
          * freetype may report a larger pixmap than possible.*/
@@ -1454,38 +1571,35 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
         if (font->outline <= 0 && width > glyph->maxx - glyph->minx) {
             width = glyph->maxx - glyph->minx;
         }
-        /* do kerning, if possible AC-Patch */
-        if (use_kerning && prev_index && glyph->index) {
-            FT_Vector delta;
-            FT_Get_Kerning(font->face, prev_index, glyph->index, ft_kerning_default, &delta);
-            xstart += delta.x >> 6;
+        /* Compensate for wrap around bug with negative minx's */
+        if (first && (glyph->minx < 0)) {
+            xstart -= glyph->minx;
         }
+        first = SDL_FALSE;
 
         for (row = 0; row < current->rows; ++row) {
-            /* Make sure we don't go either over, or under the limit */
-            if ((xstart + glyph->minx) < 0) {
-                xstart -= (xstart + glyph->minx);
-            }
-            if ((row + glyph->yoffset) < 0) {
+            /* Make sure we don't go either over, or under the
+             * limit */
+            if ( row+y_offset < 0 ) {
                 continue;
             }
-            if ((row + glyph->yoffset) >= textbuf->h) {
+            if ( row+y_offset >= textbuf->h ) {
                 continue;
             }
-            dst = (Uint8 *)textbuf->pixels +
-                (row+glyph->yoffset) * textbuf->pitch +
-                xstart + glyph->minx;
+            dst = (Uint8*) textbuf->pixels +
+                (row+y_offset) * textbuf->pitch +
+                xstart + FT_FLOOR(g_info[i].x_offset) + glyph->minx;
             src = current->buffer + row * current->pitch;
             for (col = width; col > 0 && dst < dst_check; --col) {
                 *dst++ |= *src++;
             }
         }
 
-        xstart += glyph->advance;
+        xstart += FT_FLOOR(g_info[i].x_advance);
         if (TTF_HANDLE_STYLE_BOLD(font)) {
             xstart += font->glyph_overhang;
         }
-        prev_index = glyph->index;
+        prev_index = g_info[i].index;
     }
 
     /* Handle the underline style */
@@ -1499,6 +1613,7 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
         row = TTF_strikethrough_top_row(font);
         TTF_drawLine_Solid(font, textbuf, row);
     }
+    free(g_info);
     return textbuf;
 }
 
@@ -1559,6 +1674,7 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
     int xstart;
     int width;
     int height;
+    int i;
     SDL_Surface* textbuf;
     SDL_Palette* palette;
     int index;
@@ -1571,16 +1687,22 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
     Uint8* dst_check;
     int row, col;
     FT_Bitmap* current;
+    raqm_glyph_t *g_info;
     c_glyph *glyph;
-    FT_Error error;
-    FT_Long use_kerning;
-    FT_UInt prev_index = 0;
+    size_t glyph_count;
     size_t textlen;
+    FT_Error error;
+    FT_UInt prev_index = 0;
 
     TTF_CHECKPOINTER(text, NULL);
 
+    textlen = SDL_strlen(text);
+    /* Shape text */
+
+    g_info = text_layout(text, textlen, font, &glyph_count);
+
     /* Get the dimensions of the text surface */
-    if ((TTF_SizeUTF8(font, text, &width, &height) < 0) || !width) {
+    if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
         TTF_SetError("Text has zero width");
         return NULL;
     }
@@ -1620,64 +1742,55 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
         palette->colors[index].a = bg.a + (index*adiff) / (NUM_GRAYS-1);
     }
 
-    /* check kerning */
-    use_kerning = FT_HAS_KERNING(font->face) && font->kerning;
-
-    /* Load and render each character */
-    textlen = SDL_strlen(text);
+    /* Load and render each glyph */
+    first = SDL_TRUE;
     xstart = 0;
-    while (textlen > 0) {
-        Uint32 c = UTF8_getch(&text, &textlen);
-        if (c == UNICODE_BOM_NATIVE || c == UNICODE_BOM_SWAPPED) {
-            continue;
-        }
-
-        error = Find_Glyph(font, c, CACHED_METRICS|CACHED_PIXMAP);
+    for (i = 0; i < glyph_count; i++) {
+        int y_offset;
+        error = Find_GlyphByIndex(font, g_info[i].index, CACHED_METRICS|CACHED_PIXMAP);
         if (error) {
             TTF_SetFTError("Couldn't find glyph", error);
             SDL_FreeSurface(textbuf);
             return NULL;
         }
         glyph = font->current;
+        y_offset = glyph->yoffset - FT_FLOOR(g_info[i].y_offset);
         /* Ensure the width of the pixmap is correct. On some cases,
          * freetype may report a larger pixmap than possible.*/
         width = glyph->pixmap.width;
         if (font->outline <= 0 && width > glyph->maxx - glyph->minx) {
             width = glyph->maxx - glyph->minx;
         }
-        /* do kerning, if possible AC-Patch */
-        if (use_kerning && prev_index && glyph->index) {
-            FT_Vector delta;
-            FT_Get_Kerning(font->face, prev_index, glyph->index, ft_kerning_default, &delta);
-            xstart += delta.x >> 6;
+        /* Compensate for the wrap around with negative minx's */
+        if (first && (glyph->minx < 0)) {
+            xstart -= glyph->minx;
         }
+        first = SDL_FALSE;
 
         current = &glyph->pixmap;
         for (row = 0; row < current->rows; ++row) {
-            /* Make sure we don't go either over, or under the limit */
-            if ((xstart + glyph->minx) < 0) {
-                xstart -= (xstart + glyph->minx);
-            }
-            if ((row + glyph->yoffset) < 0) {
+            /* Make sure we don't go either over, or under the
+             * limit */
+            if ( row+ y_offset < 0 ) {
                 continue;
             }
-            if ((row + glyph->yoffset) >= textbuf->h) {
+            if ( row+ y_offset >= textbuf->h ) {
                 continue;
             }
-            dst = (Uint8 *)textbuf->pixels +
-                (row+glyph->yoffset) * textbuf->pitch +
-                xstart + glyph->minx;
+            dst = (Uint8*) textbuf->pixels +
+                (row+y_offset) * textbuf->pitch +
+                xstart + FT_FLOOR(g_info[i].x_offset) + glyph->minx;
             src = current->buffer + row * current->pitch;
             for (col = width; col > 0 && dst < dst_check; --col) {
                 *dst++ |= *src++;
             }
         }
 
-        xstart += glyph->advance;
+        xstart += FT_FLOOR(g_info[i].x_advance);
         if (TTF_HANDLE_STYLE_BOLD(font)) {
             xstart += font->glyph_overhang;
         }
-        prev_index = glyph->index;
+        prev_index = g_info[i].index;
     }
 
     /* Handle the underline style */
@@ -1691,6 +1804,7 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
         row = TTF_strikethrough_top_row(font);
         TTF_drawLine_Shaded(font, textbuf, row);
     }
+    free(g_info);
     return textbuf;
 }
 
@@ -1763,15 +1877,21 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
     Uint32 *dst_check;
     int row, col;
     c_glyph *glyph;
+    raqm_glyph_t *g_info;
+    size_t glyph_count;
+    int i;
     FT_Error error;
-    FT_Long use_kerning;
     FT_UInt prev_index = 0;
     size_t textlen;
 
     TTF_CHECKPOINTER(text, NULL);
 
+    textlen = SDL_strlen(text);
+    /* Shape text */
+    g_info = text_layout(text, textlen, font, &glyph_count);
+
     /* Get the dimensions of the text surface */
-    if ((TTF_SizeUTF8(font, text, &width, &height) < 0) || !width) {
+    if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
         TTF_SetError("Text has zero width");
         return(NULL);
     }
@@ -1786,9 +1906,6 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
     /* Adding bound checking to avoid all kinds of memory corruption errors
        that may occur. */
     dst_check = (Uint32*)textbuf->pixels + textbuf->pitch/4 * textbuf->h;
-
-    /* check kerning */
-    use_kerning = FT_HAS_KERNING(font->face) && font->kerning;
 
     /* Support alpha blending */
     if (!fg.a) {
@@ -1805,63 +1922,57 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
         SDL_SetSurfaceBlendMode(textbuf, SDL_BLENDMODE_BLEND);
     }
 
-    /* Load and render each character */
-    textlen = SDL_strlen(text);
+    /* Load and render each glyph */
+    first = SDL_TRUE;
     xstart = 0;
     pixel = (fg.r<<16)|(fg.g<<8)|fg.b;
     SDL_FillRect(textbuf, NULL, pixel); /* Initialize with fg and 0 alpha */
-    while (textlen > 0) {
-        Uint32 c = UTF8_getch(&text, &textlen);
-        if (c == UNICODE_BOM_NATIVE || c == UNICODE_BOM_SWAPPED) {
-            continue;
-        }
 
-        error = Find_Glyph(font, c, CACHED_METRICS|CACHED_PIXMAP);
+    for (i = 0; i < glyph_count; i++) {
+        int y_offset;
+        error = Find_GlyphByIndex(font, g_info[i].index, CACHED_METRICS|CACHED_PIXMAP);
         if (error) {
             TTF_SetFTError("Couldn't find glyph", error);
             SDL_FreeSurface(textbuf);
             return NULL;
         }
         glyph = font->current;
+        y_offset = glyph->yoffset - FT_FLOOR(g_info[i].y_offset);
         /* Ensure the width of the pixmap is correct. On some cases,
          * freetype may report a larger pixmap than possible.*/
         width = glyph->pixmap.width;
         if (font->outline <= 0 && width > glyph->maxx - glyph->minx) {
             width = glyph->maxx - glyph->minx;
         }
-        /* do kerning, if possible AC-Patch */
-        if (use_kerning && prev_index && glyph->index) {
-            FT_Vector delta;
-            FT_Get_Kerning(font->face, prev_index, glyph->index, ft_kerning_default, &delta);
-            xstart += delta.x >> 6;
-        }
 
         for (row = 0; row < glyph->pixmap.rows; ++row) {
-            /* Make sure we don't go either over, or under the limit */
-            if ((xstart + glyph->minx) < 0) {
-                xstart -= (xstart + glyph->minx);
-            }
-            if ((row + glyph->yoffset) < 0) {
+            /* Make sure we don't go either over, or under the
+             * limit */
+            if ( row+y_offset < 0 ) {
                 continue;
             }
-            if ((row + glyph->yoffset) >= textbuf->h) {
+            if ( row+y_offset >= textbuf->h ) {
                 continue;
             }
-            dst = (Uint32 *)textbuf->pixels +
-                (row+glyph->yoffset) * textbuf->pitch/4 +
-                xstart + glyph->minx;
-            src = (Uint8*)glyph->pixmap.buffer + row * glyph->pixmap.pitch;
-            for (col = width; col > 0 && dst < dst_check; --col) {
+            dst = (Uint32*) textbuf->pixels +
+                (row+y_offset) * textbuf->pitch/4 +
+                xstart + FT_FLOOR(g_info[i].x_offset) + glyph->minx;
+
+            /* Added code to adjust src pointer for pixmaps to
+             * account for pitch.
+             * */
+            src = (Uint8*) (glyph->pixmap.buffer + glyph->pixmap.pitch * row);
+            for (col = width; col>0 && dst < dst_check; --col) {
                 alpha = *src++;
                 *dst++ |= pixel | ((Uint32)alpha_table[alpha] << 24);
             }
         }
 
-        xstart += glyph->advance;
+        xstart += FT_FLOOR(g_info[i].x_advance);
         if (TTF_HANDLE_STYLE_BOLD(font)) {
             xstart += font->glyph_overhang;
         }
-        prev_index = glyph->index;
+        prev_index = g_info[i].index;
     }
 
     /* Handle the underline style */
@@ -1875,6 +1986,7 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
         row = TTF_strikethrough_top_row(font);
         TTF_drawLine_Blended(font, textbuf, row, pixel | (Uint32)fg.a << 24);
     }
+    free(g_info);
     return(textbuf);
 }
 
@@ -1935,6 +2047,7 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
 {
     int i;
     int xstart;
+    int i;
     int width, height;
     SDL_Surface *textbuf;
     Uint8 alpha;
@@ -1945,8 +2058,9 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
     Uint32 *dst_check;
     int row, col;
     c_glyph *glyph;
+    raqm_glyph_t *g_info;
+    size_t glyph_count;
     FT_Error error;
-    FT_Long use_kerning;
     FT_UInt prev_index = 0;
 #ifndef TTF_USE_LINESKIP
     const int lineSpace = 2;
@@ -1957,8 +2071,12 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
 
     TTF_CHECKPOINTER(text, NULL);
 
+    textlen = SDL_strlen(text);
+    /* Shape text */
+    g_info = text_layout(text,textlen, font, &glyph_count);
+
     /* Get the dimensions of the text surface */
-    if ((TTF_SizeUTF8(font, text, &width, &height) < 0) || !width) {
+     if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
         TTF_SetError("Text has zero width");
         return(NULL);
     }
@@ -2072,9 +2190,6 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
      that may occur. */
     dst_check = (Uint32*)textbuf->pixels + textbuf->pitch/4 * textbuf->h;
 
-    /* check kerning */
-    use_kerning = FT_HAS_KERNING(font->face) && font->kerning;
-
     /* Support alpha blending */
     if (!fg.a) {
         fg.a = SDL_ALPHA_OPAQUE;
@@ -2090,7 +2205,7 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
         SDL_SetSurfaceBlendMode(textbuf, SDL_BLENDMODE_BLEND);
     }
 
-    /* Load and render each character */
+    /* Load and render each glyph */
     pixel = (fg.r<<16)|(fg.g<<8)|fg.b;
     SDL_FillRect(textbuf, NULL, pixel); /* Initialize with fg and 0 alpha */
 
@@ -2098,15 +2213,11 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
         if (strLines) {
             text = strLines[line];
         }
-        textlen = SDL_strlen(text);
+        first = SDL_TRUE;
         xstart = 0;
-        while (textlen > 0) {
-            Uint32 c = UTF8_getch(&text, &textlen);
-            if (c == UNICODE_BOM_NATIVE || c == UNICODE_BOM_SWAPPED) {
-                continue;
-            }
-
-            error = Find_Glyph(font, c, CACHED_METRICS|CACHED_PIXMAP);
+        for (i = 0; i < glyph_count; i++) {
+            int y_offset;
+            error = Find_GlyphByIndex(font, g_info[i].index, CACHED_METRICS|CACHED_PIXMAP);
             if (error) {
                 TTF_SetFTError("Couldn't find glyph", error);
                 SDL_FreeSurface(textbuf);
@@ -2117,45 +2228,47 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
                 return NULL;
             }
             glyph = font->current;
+            y_offset = glyph->yoffset - FT_FLOOR(g_info[i].y_offset);
             /* Ensure the width of the pixmap is correct. On some cases,
              * freetype may report a larger pixmap than possible.*/
             width = glyph->pixmap.width;
             if (font->outline <= 0 && width > glyph->maxx - glyph->minx) {
                 width = glyph->maxx - glyph->minx;
             }
-            /* do kerning, if possible AC-Patch */
-            if (use_kerning && prev_index && glyph->index) {
-                FT_Vector delta;
-                FT_Get_Kerning(font->face, prev_index, glyph->index, ft_kerning_default, &delta);
-                xstart += delta.x >> 6;
+            /* Compensate for the wrap around bug with negative minx's */
+            if (first && (glyph->minx < 0)) {
+                xstart -= glyph->minx;
             }
+            first = SDL_FALSE;
 
             for (row = 0; row < glyph->pixmap.rows; ++row) {
-                /* Make sure we don't go either over, or under the limit */
-                if ((xstart + glyph->minx) < 0) {
-                    xstart -= (xstart + glyph->minx);
-                }
-                if ((row + glyph->yoffset) < 0) {
+                /* Make sure we don't go either over, or under the
+                 * limit */
+                if ( row+y_offset < 0 ) {
                     continue;
                 }
-                if ((row + glyph->yoffset) >= textbuf->h) {
+                if ( row+y_offset >= textbuf->h ) {
                     continue;
                 }
-                dst = ((Uint32*)textbuf->pixels + rowSize * line) +
-                        (row+glyph->yoffset) * textbuf->pitch/4 +
-                        xstart + glyph->minx;
-                src = (Uint8*)glyph->pixmap.buffer + row * glyph->pixmap.pitch;
-                for (col = width; col > 0 && dst < dst_check; --col) {
+                dst =  ((Uint32*)textbuf->pixels + rowSize * line) +
+                (row+y_offset) * textbuf->pitch/4 +
+                xstart + FT_FLOOR(g_info[i].x_offset) + glyph->minx;
+
+                /* Added code to adjust src pointer for pixmaps to
+                 * account for pitch.
+                 * */
+                src = (Uint8*) (glyph->pixmap.buffer + glyph->pixmap.pitch * row);
+                for (col = width; col>0 && dst < dst_check; --col) {
                     alpha = *src++;
                     *dst++ |= pixel | ((Uint32)alpha_table[alpha] << 24);
                 }
             }
 
-            xstart += glyph->advance;
+            xstart += FT_FLOOR(g_info[i].x_advance);
             if (TTF_HANDLE_STYLE_BOLD(font)) {
                 xstart += font->glyph_overhang;
             }
-            prev_index = glyph->index;
+            prev_index = g_info[i].index;
         }
 
         /* Handle the underline style *
@@ -2177,6 +2290,7 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
         SDL_free(strLines);
         SDL_stack_free(str);
     }
+    free(g_info);
     return(textbuf);
 }
 
