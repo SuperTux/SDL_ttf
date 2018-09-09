@@ -345,74 +345,75 @@ typedef struct {
     int x_advance;
     int y_offset;
 } raqm_glyph_t;
+
+typedef struct {
+  raqm_glyph_t* g_info;
+} raqm_t;
+
+void raqm_destroy(raqm_t *rq)
+{
+  free(rq->g_info);
+  free(rq);
+}
 #endif
 
-raqm_glyph_t *text_layout(const char *text, size_t textlen, TTF_Font *font, size_t *glyph_count)
+int text_layout(const char *text, size_t textlen, TTF_Font *font,
+                raqm_t **rq, raqm_glyph_t **g_info, size_t *glyph_count)
 {
-
 #ifdef HAVE_RAQM
-    raqm_t *rq;
-    raqm_glyph_t *glyphs;
-
-    rq = raqm_create();
-    if ( rq == NULL )
+    *rq = raqm_create();
+    if ( *rq == NULL )
     {
-        raqm_destroy(rq);
-        *glyph_count = 0;
-        return NULL;
+        return -1;
     }
 
-    if ( !raqm_set_text_utf8(rq, text, textlen) )
+    if ( !raqm_set_text_utf8(*rq, text, textlen) )
     {
-        raqm_destroy(rq);
-        *glyph_count = 0;
-        return NULL;
+        raqm_destroy(*rq);
+        return -1;
     }
 
 
-    if ( !raqm_set_freetype_face(rq, font->face) )
+    if ( !raqm_set_freetype_face(*rq, font->face) )
     {
-        raqm_destroy(rq);
-        *glyph_count = 0;
-        return NULL;
+        raqm_destroy(*rq);
+        return -1;
     }
 
-    if ( !raqm_set_par_direction(rq, RAQM_DIRECTION_DEFAULT) )
+    if ( !raqm_set_par_direction(*rq, RAQM_DIRECTION_DEFAULT) )
     {
-        raqm_destroy(rq);
-        *glyph_count = 0;
-        return NULL;
+        raqm_destroy(*rq);
+        return -1;
     }
 
-    if ( !raqm_layout(rq) )
+    if ( !raqm_layout(*rq) )
     {
-        raqm_destroy(rq);
-        *glyph_count = 0;
-        return NULL;
+        raqm_destroy(*rq);
+        return -1;
     }
 
-    glyphs = raqm_get_glyphs(rq, glyph_count);
-    if ( glyphs == NULL )
+    *g_info = raqm_get_glyphs(*rq, glyph_count);
+    if ( *g_info == NULL )
     {
-        raqm_destroy(rq);
-        *glyph_count = 0;
-        return NULL;
+        raqm_destroy(*rq);
+        return -1;
     }
 
-    return glyphs;
+    return 0;
 #else
     int xstart;
     c_glyph *glyph;
     FT_Error error;
     FT_Long use_kerning;
     FT_UInt prev_index = 0;
-    raqm_glyph_t *g_info;
     size_t count = 0;
 
     /* check kerning */
     use_kerning = FT_HAS_KERNING( font->face ) && font->kerning;
 
-    g_info = (raqm_glyph_t*) malloc(sizeof(raqm_glyph_t) * (textlen));
+    *rq = (raqm_t*) malloc(sizeof(raqm_t));
+    *g_info = (raqm_glyph_t*) malloc(sizeof(raqm_glyph_t) * (textlen));
+    (*rq)->g_info = *g_info;
 
     xstart = 0;
     for ( count = 0; textlen > 0; count++ ) {
@@ -424,28 +425,29 @@ raqm_glyph_t *text_layout(const char *text, size_t textlen, TTF_Font *font, size
         error = Find_Glyph(font, c, CACHED_METRICS|CACHED_BITMAP);
         if ( error ) {
             TTF_SetFTError("Couldn't find glyph", error);
+            raqm_destroy(*rq);
             *glyph_count = 0;
-            return NULL;
+            return -1;
         }
         glyph = font->current;
 
-        g_info[count].index = glyph->index;
-        g_info[count].y_offset = 0;
-        g_info[count].x_offset = 0;
-        g_info[count].x_advance = glyph->advance;
+        (*g_info)[count].index = glyph->index;
+        (*g_info)[count].y_offset = 0;
+        (*g_info)[count].x_offset = 0;
+        (*g_info)[count].x_advance = glyph->advance;
 
         /* do kerning, if possible AC-Patch */
         if ( use_kerning && prev_index && glyph->index ) {
             FT_Vector delta;
-            FT_Get_Kerning( font->face, prev_index, g_info->index, ft_kerning_default, &delta );
+            FT_Get_Kerning( font->face, prev_index, (*g_info)->index, ft_kerning_default, &delta );
             xstart += delta.x >> 6;
-            g_info[count - 1].x_advance += delta.x;
+            (*g_info)[count - 1].x_advance += delta.x;
         }
     }
 
     *glyph_count = count;
 
-    return g_info;
+    return 0;
 #endif
 }
 
@@ -1443,20 +1445,27 @@ static int CalculateSize(TTF_Font *font, raqm_glyph_t *g_info, size_t glyph_coun
 
 int TTF_SizeUTF8(TTF_Font *font, const char *text, int *w, int *h)
 {
-    raqm_glyph_t *glyphs;
-    size_t glyph_count;
     size_t textlen;
+    raqm_t *rq = NULL;
+    raqm_glyph_t *g_info = NULL;
+    size_t glyph_count = 0;
 
     TTF_CHECKPOINTER(text, -1);
 
     textlen = SDL_strlen(text);
 
     /* Shape text */
-
-    glyphs = text_layout(text, textlen, font, &glyph_count);
-
+    if (text_layout(text, textlen, font, &rq, &g_info, &glyph_count) < 0)
+    {
+      return 0;
+    }
+    else
+    {
     /* Calculate the size */
-    return CalculateSize(font, glyphs, glyph_count, w, h);
+      int size = CalculateSize(font, g_info, glyph_count, w, h);
+      raqm_destroy(rq);
+      return size;
+    }
 }
 
 int TTF_SizeUNICODE(TTF_Font *font, const Uint16 *text, int *w, int *h)
@@ -1510,8 +1519,11 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
     int row, col;
     int i;
     c_glyph *glyph;
-    raqm_glyph_t *g_info;
-    size_t glyph_count;
+
+    raqm_t *rq = NULL;
+    raqm_glyph_t *g_info = NULL;
+    size_t glyph_count = 0;
+
     FT_Bitmap *current;
     FT_Error error;
     FT_UInt prev_index = 0;
@@ -1522,17 +1534,23 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
 
     /* Shape text */
 
-    g_info = text_layout(text, textlen, font, &glyph_count);
+    if (text_layout(text, textlen, font, &rq, &g_info, &glyph_count) < 0)
+    {
+      TTF_SetError( "Text layout failed" );
+      return NULL;
+    }
 
     /* Get the dimensions of the text surface */
     if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
         TTF_SetError("Text has zero width");
+        raqm_destroy(rq);
         return NULL;
     }
 
     /* Create the target surface */
     textbuf = SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, 8, 0, 0, 0, 0);
     if (textbuf == NULL) {
+        raqm_destroy(rq);
         return NULL;
     }
 
@@ -1560,6 +1578,7 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
         if (error) {
             TTF_SetFTError("Couldn't find glyph", error);
             SDL_FreeSurface(textbuf);
+            raqm_destroy(rq);
             return NULL;
         }
         glyph = font->current;
@@ -1613,7 +1632,9 @@ SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
         row = TTF_strikethrough_top_row(font);
         TTF_drawLine_Solid(font, textbuf, row);
     }
-    free(g_info);
+
+    raqm_destroy(rq);
+
     return textbuf;
 }
 
@@ -1687,9 +1708,12 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
     Uint8* dst_check;
     int row, col;
     FT_Bitmap* current;
-    raqm_glyph_t *g_info;
     c_glyph *glyph;
-    size_t glyph_count;
+
+    raqm_t *rq = NULL;
+    raqm_glyph_t *g_info = NULL;
+    size_t glyph_count = 0;
+
     size_t textlen;
     FT_Error error;
     FT_UInt prev_index = 0;
@@ -1699,10 +1723,15 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
     textlen = SDL_strlen(text);
     /* Shape text */
 
-    g_info = text_layout(text, textlen, font, &glyph_count);
+    if (text_layout(text, textlen, font, &rq, &g_info, &glyph_count) < 0)
+    {
+      TTF_SetError("Text layout failed");
+      return NULL;
+    }
 
     /* Get the dimensions of the text surface */
     if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
+        raqm_destroy(rq);
         TTF_SetError("Text has zero width");
         return NULL;
     }
@@ -1710,6 +1739,7 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
     /* Create the target surface */
     textbuf = SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, 8, 0, 0, 0, 0);
     if (textbuf == NULL) {
+        raqm_destroy(rq);
         return NULL;
     }
 
@@ -1751,6 +1781,7 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
         if (error) {
             TTF_SetFTError("Couldn't find glyph", error);
             SDL_FreeSurface(textbuf);
+            raqm_destroy(rq);
             return NULL;
         }
         glyph = font->current;
@@ -1804,7 +1835,7 @@ SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
         row = TTF_strikethrough_top_row(font);
         TTF_drawLine_Shaded(font, textbuf, row);
     }
-    free(g_info);
+    raqm_destroy(rq);
     return textbuf;
 }
 
@@ -1877,8 +1908,11 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
     Uint32 *dst_check;
     int row, col;
     c_glyph *glyph;
-    raqm_glyph_t *g_info;
-    size_t glyph_count;
+
+    raqm_t *rq = NULL;
+    raqm_glyph_t *g_info = NULL;
+    size_t glyph_count = 0;
+
     int i;
     FT_Error error;
     FT_UInt prev_index = 0;
@@ -1888,10 +1922,15 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
 
     textlen = SDL_strlen(text);
     /* Shape text */
-    g_info = text_layout(text, textlen, font, &glyph_count);
+    if (text_layout(text, textlen, font, &rq, &g_info, &glyph_count) < 0)
+    {
+      TTF_SetError("Text layout failed");
+      return NULL;
+    }
 
     /* Get the dimensions of the text surface */
     if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
+        raqm_destroy(rq);
         TTF_SetError("Text has zero width");
         return(NULL);
     }
@@ -1900,7 +1939,9 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
     textbuf = SDL_CreateRGBSurface(SDL_SWSURFACE, width, height, 32,
                                0x00FF0000, 0x0000FF00, 0x000000FF, 0xFF000000);
     if (textbuf == NULL) {
-        return(NULL);
+        raqm_destroy(rq);
+        TTF_SetError("SDL_Surface creation failed");
+        return NULL;
     }
 
     /* Adding bound checking to avoid all kinds of memory corruption errors
@@ -1934,6 +1975,7 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
         if (error) {
             TTF_SetFTError("Couldn't find glyph", error);
             SDL_FreeSurface(textbuf);
+            raqm_destroy(rq);
             return NULL;
         }
         glyph = font->current;
@@ -1986,7 +2028,8 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
         row = TTF_strikethrough_top_row(font);
         TTF_drawLine_Blended(font, textbuf, row, pixel | (Uint32)fg.a << 24);
     }
-    free(g_info);
+
+    raqm_destroy(rq);
     return(textbuf);
 }
 
@@ -2058,8 +2101,11 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
     Uint32 *dst_check;
     int row, col;
     c_glyph *glyph;
-    raqm_glyph_t *g_info;
-    size_t glyph_count;
+
+    raqm_t *rq = NULL;
+    raqm_glyph_t *g_info = NULL;
+    size_t glyph_count = 0;
+
     FT_Error error;
     FT_UInt prev_index = 0;
 #ifndef TTF_USE_LINESKIP
@@ -2073,10 +2119,15 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
 
     textlen = SDL_strlen(text);
     /* Shape text */
-    g_info = text_layout(text,textlen, font, &glyph_count);
+    if (text_layout(text,textlen, font, &rq, &g_info, &glyph_count) < 0)
+    {
+        TTF_SetError("Text layout failed");
+        return NULL;
+    }
 
     /* Get the dimensions of the text surface */
      if ( ( CalculateSize(font, g_info, glyph_count, &width, &height) < 0 ) || !width ) {
+        raqm_destroy(rq);
         TTF_SetError("Text has zero width");
         return(NULL);
     }
@@ -2095,6 +2146,7 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
 
         str = SDL_stack_alloc(char, str_len+1);
         if (str == NULL) {
+            raqm_destroy(rq);
             TTF_SetError("Out of memory");
             return(NULL);
         }
@@ -2105,6 +2157,7 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
         do {
             newLines = (char **)SDL_realloc(strLines, (numLines+1)*sizeof(*strLines));
             if (!newLines) {
+                raqm_destroy(rq);
                 TTF_SetError("Out of memory");
                 SDL_free(strLines);
                 SDL_stack_free(str);
@@ -2177,6 +2230,7 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
             SDL_free(strLines);
             SDL_stack_free(str);
         }
+        raqm_destroy(rq);
         return(NULL);
     }
 
@@ -2290,7 +2344,8 @@ SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
         SDL_free(strLines);
         SDL_stack_free(str);
     }
-    free(g_info);
+
+    raqm_destroy(rq);
     return(textbuf);
 }
 
