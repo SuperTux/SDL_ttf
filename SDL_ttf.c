@@ -357,6 +357,8 @@ void raqm_destroy(raqm_t *rq)
 }
 #endif
 
+static FT_Error Find_GlyphByIndex( TTF_Font* font, Uint16 idx, int want );
+
 int text_layout(const char *text, size_t textlen, TTF_Font *font,
                 raqm_t **rq, raqm_glyph_t **g_info, size_t *glyph_count)
 {
@@ -422,7 +424,8 @@ int text_layout(const char *text, size_t textlen, TTF_Font *font,
             continue;
         }
 
-        error = Find_Glyph(font, c, CACHED_METRICS|CACHED_BITMAP);
+        FT_UInt index = FT_Get_Char_Index( font->face, c );
+        error = Find_GlyphByIndex(font, index, CACHED_METRICS|CACHED_BITMAP);
         if ( error ) {
             TTF_SetFTError("Couldn't find glyph", error);
             raqm_destroy(*rq);
