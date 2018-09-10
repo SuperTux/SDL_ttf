@@ -1941,6 +1941,7 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
             /* Added code to adjust src pointer for pixmaps to
              * account for pitch.
              * */
+            dst_check = (Uint32*) textbuf->pixels + (row + y_offset + 1) * textbuf->pitch/4;
             src = (Uint8*) (glyph->pixmap.buffer + glyph->pixmap.pitch * row);
             for ( col = width; col>0 && dst < dst_check; --col) {
                 alpha = *src++;
