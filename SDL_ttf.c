@@ -335,7 +335,7 @@ static void TTF_SetFTError(const char *msg, FT_Error error)
 #endif /* USE_FREETYPE_ERRORS */
 }
 
-static FT_Error Find_Glyph( TTF_Font* font, Uint16 ch, int want );
+static FT_Error Find_Glyph( TTF_Font* font, Uint32 ch, int want );
 static Uint32 UTF8_getch(const char **src, size_t *srclen);
 
 #ifndef HAVE_RAQM
@@ -1511,6 +1511,7 @@ SDL_Surface *TTF_RenderText_Solid(TTF_Font *font,
 SDL_Surface *TTF_RenderUTF8_Solid(TTF_Font *font,
                 const char *text, SDL_Color fg)
 {
+    SDL_bool first;
     int xstart;
     int width;
     int height;
@@ -1695,6 +1696,7 @@ SDL_Surface *TTF_RenderText_Shaded(TTF_Font *font,
 SDL_Surface *TTF_RenderUTF8_Shaded(TTF_Font *font,
                 const char *text, SDL_Color fg, SDL_Color bg)
 {
+    SDL_bool first;
     int xstart;
     int width;
     int height;
@@ -1899,6 +1901,7 @@ SDL_Surface *TTF_RenderText_Blended(TTF_Font *font,
 SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
                 const char *text, SDL_Color fg)
 {
+    SDL_bool first;
     int i;
     int xstart;
     int width, height;
@@ -1916,7 +1919,6 @@ SDL_Surface *TTF_RenderUTF8_Blended(TTF_Font *font,
     raqm_glyph_t *g_info = NULL;
     size_t glyph_count = 0;
 
-    int i;
     FT_Error error;
     FT_UInt prev_index = 0;
     size_t textlen;
@@ -2092,9 +2094,9 @@ static SDL_bool CharacterIsDelimiter(char c, const char *delimiters)
 SDL_Surface *TTF_RenderUTF8_Blended_Wrapped(TTF_Font *font,
                                     const char *text, SDL_Color fg, Uint32 wrapLength)
 {
+    SDL_bool first;
     int i;
     int xstart;
-    int i;
     int width, height;
     SDL_Surface *textbuf;
     Uint8 alpha;
