@@ -44,6 +44,7 @@ AC_CANONICAL_HOST
 
 dnl Setup for automake
 AM_INIT_AUTOMAKE([foreign])
+AM_MAINTAINER_MODE
 
 dnl Check for tools
 AC_PROG_LIBTOOL
