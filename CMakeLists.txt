@@ -11,7 +11,12 @@ add_library(SDL2_ttf SDL_ttf.c version.rc)
 
 set_target_properties(SDL2_ttf PROPERTIES DEFINE_SYMBOL SDL2_EXPORTS)
 target_include_directories(SDL2_ttf PRIVATE ${SDL_INCLUDE_DIR}/SDL2 ${FREETYPE_INCLUDE_DIR_ft2build})
-target_link_libraries(SDL2_ttf ${SDL_LIBRARY} ${FREETYPE_LIBRARY})
+if(WITH_RAQM)
+    add_definitions(-DHAVE_RAQM=1)
+    target_include_directories(SDL2_ttf PRIVATE ${RAQM_INCLUDE_DIR})
+    target_link_libraries(SDL2_ttf PUBLIC ${RAQM_LIBRARIES})
+endif()
+target_link_libraries(SDL2_ttf PRIVATE ${SDL_LIBRARY} Freetype::Freetype)
 
 install(TARGETS SDL2_ttf
     RUNTIME DESTINATION bin
@@ -24,4 +29,4 @@ endif()
 
 message(STATUS "Link-time dependencies:")
 message(STATUS "  " ${SDL_LIBRARY})
-message(STATUS "  " ${FREETYPE_LIBRARY})
+message(STATUS "  " Freetype::Freetype)
