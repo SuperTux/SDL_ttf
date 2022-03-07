@@ -11,6 +11,8 @@ add_library(SDL2_ttf SDL_ttf.c version.rc)
 
 set_target_properties(SDL2_ttf PROPERTIES DEFINE_SYMBOL SDL2_EXPORTS)
 target_include_directories(SDL2_ttf PRIVATE ${SDL_INCLUDE_DIR}/SDL2 ${FREETYPE_INCLUDE_DIR_ft2build})
+target_include_directories(SDL2_ttf PUBLIC $<INSTALL_INTERFACE:include/SDL2>)
+
 if(WITH_RAQM)
     add_definitions(-DHAVE_RAQM=1)
     target_include_directories(SDL2_ttf PRIVATE ${RAQM_INCLUDE_DIR})
@@ -19,6 +21,7 @@ endif()
 target_link_libraries(SDL2_ttf PRIVATE ${SDL_LIBRARY} ${FREETYPE_LIBRARY})
 
 install(TARGETS SDL2_ttf
+    EXPORT sdl2_ttf-targets
     RUNTIME DESTINATION bin
     ARCHIVE DESTINATION lib
     LIBRARY DESTINATION lib)
@@ -26,6 +29,18 @@ install(TARGETS SDL2_ttf
 if(NOT DEFINED SDL_TTF_SKIP_HEADERS)
     install(FILES SDL_ttf.h DESTINATION include/SDL2)
 endif()
+
+# CMake integration
+configure_file(sdl2_ttf-config.cmake.in
+  "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/sdl2_ttf-config.cmake" @ONLY)
+install(FILES
+  "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/sdl2_ttf-config.cmake"
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/SDL2_ttf/")
+export(TARGETS SDL2_ttf
+  FILE "${CMAKE_CURRENT_BINARY_DIR}/${CMAKE_FILES_DIRECTORY}/sdl2_ttf-targets.cmake")
+export(PACKAGE SDL2_ttf)
+install(EXPORT sdl2_ttf-targets
+  DESTINATION "${CMAKE_INSTALL_LIBDIR}/cmake/SDL2_ttf/")
 
 message(STATUS "Link-time dependencies:")
 message(STATUS "  " ${SDL_LIBRARY})
