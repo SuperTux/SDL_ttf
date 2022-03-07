@@ -15,5 +15,6 @@
 /glfont.o
 /libSDL2_ttf.la
 /libtool
+/result
 /showfont
 /showfont.o
