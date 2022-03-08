@@ -31,10 +31,28 @@
         "type": "github"
       }
     },
+    "raqm_src": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1632761857,
+        "narHash": "sha256-Zv6h5Z9X9H1gc/tDy0GPdOCWOaJwM7UbQOPQI2jRDOo=",
+        "owner": "HOST-Oman",
+        "repo": "libraqm",
+        "rev": "573820451937d7a7f33a1ec132bc1f1b12db917f",
+        "type": "github"
+      },
+      "original": {
+        "owner": "HOST-Oman",
+        "ref": "v0.7.2",
+        "repo": "libraqm",
+        "type": "github"
+      }
+    },
     "root": {
       "inputs": {
         "flake-utils": "flake-utils",
-        "nixpkgs": "nixpkgs"
+        "nixpkgs": "nixpkgs",
+        "raqm_src": "raqm_src"
       }
     }
   },
