@@ -3,6 +3,8 @@
 cmake_minimum_required(VERSION 3.0)
 project(SDL2_TTF C)
 
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${CMAKE_CURRENT_SOURCE_DIR}/mk/cmake)
+
 find_path(SDL_INCLUDE_DIR SDL2/SDL.h)
 find_library(SDL_LIBRARY NAMES SDL2d SDL2)
 find_package(Freetype REQUIRED)
@@ -14,9 +16,10 @@ target_include_directories(SDL2_ttf PRIVATE ${SDL_INCLUDE_DIR}/SDL2 ${FREETYPE_I
 target_include_directories(SDL2_ttf PUBLIC $<INSTALL_INTERFACE:include/SDL2>)
 
 if(WITH_RAQM)
-    add_definitions(-DHAVE_RAQM=1)
-    target_include_directories(SDL2_ttf PRIVATE ${RAQM_INCLUDE_DIR})
-    target_link_libraries(SDL2_ttf PUBLIC ${RAQM_LIBRARIES})
+  find_package(RAQM REQUIRED)
+  add_definitions(-DHAVE_RAQM=1)
+  target_include_directories(SDL2_ttf PRIVATE ${RAQM_INCLUDE_DIR})
+  target_link_libraries(SDL2_ttf PUBLIC ${RAQM_LIBRARY})
 endif()
 target_link_libraries(SDL2_ttf PRIVATE ${SDL_LIBRARY} ${FREETYPE_LIBRARY})
 
