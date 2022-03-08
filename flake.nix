@@ -4,9 +4,12 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-21.11";
     flake-utils.url = "github:numtide/flake-utils";
+
+    raqm_src.url = "github:HOST-Oman/libraqm/v0.7.2";
+    raqm_src.flake = false;
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
+  outputs = { self, nixpkgs, flake-utils, raqm_src }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -15,10 +18,7 @@
           raqm = pkgs.stdenv.mkDerivation rec {
             pname = "libraqm";
             version = "0.7.2";
-            src = fetchTarball {
-              url = "https://github.com/HOST-Oman/libraqm/releases/download/v${version}/raqm-${version}.tar.xz";
-              sha256 = "1shcs5l27l7380dvacvhl8wrdq3lix0wnhzvfdh7vx2pkzjs3zk6";
-            };
+            src = raqm_src;
             nativeBuildInputs = [
               pkgs.meson
               pkgs.ninja
