@@ -2,7 +2,7 @@
   description = "Support for TrueType (.ttf) font files with Simple Directmedia Layer";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-21.11";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
     flake-utils.url = "github:numtide/flake-utils";
 
     raqm_src.url = "github:HOST-Oman/libraqm/v0.7.2";
@@ -52,8 +52,9 @@
               pkgs.freetype
               pkgs.libGL
             ];
-           };
+          };
+          default = SDL2_ttf;
         };
-        defaultPackage = packages.SDL2_ttf;
-      });
+      }
+    );
 }
