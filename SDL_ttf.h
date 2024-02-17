@@ -274,7 +274,7 @@ extern DECLSPEC int SDLCALL TTF_WasInit(void);
    wildly incorrect results, especially with non-ASCII values.
    Going forward, please use TTF_GetFontKerningSizeGlyphs() instead, which
    does what you probably expected this function to do. */
-extern DECLSPEC int TTF_GetFontKerningSize(TTF_Font *font, int prev_index, int index) SDL_DEPRECATED;
+extern DECLSPEC int TTF_GetFontKerningSize(TTF_Font *font, int prev_index, int index);
 
 /* Get the kerning size of two glyphs */
 extern DECLSPEC int TTF_GetFontKerningSizeGlyphs(TTF_Font *font, Uint16 previous_ch, Uint16 ch);
