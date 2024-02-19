@@ -26,6 +26,7 @@ endif()
 target_link_libraries(SDL2_ttf PRIVATE ${SDL_LIBRARY} ${FREETYPE_LIBRARY})
 
 if(SDL2TTF_INSTALL)
+  include(GNUInstallDirs)
   install(TARGETS SDL2_ttf
     EXPORT sdl2_ttf-targets
     RUNTIME DESTINATION bin
