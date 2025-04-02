@@ -9,7 +9,7 @@ option(SDL2TTF_RAQM "Build with RAQM" OFF)
 add_library(SDL2_ttf SDL_ttf.c version.rc)
 
 set_target_properties(SDL2_ttf PROPERTIES DEFINE_SYMBOL SDL2_EXPORTS)
-target_include_directories(SDL2_ttf PRIVATE ${PROJECT_SOURCE_DIR})
+target_include_directories(SDL2_ttf PUBLIC ${PROJECT_SOURCE_DIR})
 
 if(SDL2TTF_RAQM AND (TARGET RAQM))
   target_compile_definitions(SDL2_ttf PRIVATE HAVE_RAQM=1)
