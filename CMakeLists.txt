@@ -15,30 +15,7 @@ if(TARGET RAQM)
   message(STATUS "Compiling SDL_ttf with RAQM")
   set(SDL2TTF_RAQM ON)
 else()
-  # When the library is installed through vcpkg, RAQM can't be detected successfully.
-  # Let's try it manually.
-  find_package(PkgConfig)
-  if(PKG_CONFIG_FOUND)
-    pkg_check_modules(PC_RAQM raqm)
-  endif()
-
-  find_path(RAQM_INCLUDE_DIR NAMES raqm.h HINTS ${PC_RAQM_INCLUDE_DIRS}
-    ${PC_RAQM_INCLUDEDIR})
-  find_library(RAQM_LIBRARY NAMES raqm HINTS ${PC_RAQM_LIBRARY_DIRS}
-    ${PC_RAQM_LIBDIR})
-  if(RAQM_INCLUDE_DIR AND RAQM_LIBRARY)
-    message(STATUS "Found RAQM using fallback method, compiling SDL_ttf with RAQM")
-    target_compile_definitions(SDL2_ttf PRIVATE HAVE_RAQM=1)
-    
-    find_package(Freetype CONFIG REQUIRED)
-    find_package(harfbuzz CONFIG REQUIRED)
-    find_library(FRIBIDI_LIBRARY NAMES fribidi)
-
-    target_link_libraries(SDL2_ttf PRIVATE ${RAQM_LIBRARY} Freetype::Freetype harfbuzz::harfbuzz ${FRIBIDI_LIBRARY})
-    target_include_directories(SDL2_ttf PRIVATE ${RAQM_INCLUDE_DIR})
-  else()
-    message(STATUS "SDL_ttf will not be compiled with RAQM")
-  endif()
+  message(STATUS "SDL_ttf will not be compiled with RAQM")
 endif()
 
 if(SDL2TTF_RAQM AND (TARGET RAQM))
